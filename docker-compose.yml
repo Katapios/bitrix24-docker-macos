@@ -1,0 +1,221 @@
+version: '3.8'
+
+services:
+
+  memcache:
+    image: memcached:alpine
+    container_name: bx-memcache
+    restart: always
+    networks:
+      bx:
+        aliases:
+          - memcache
+
+  mailhog:
+    image: mailhog/mailhog
+    container_name: mailhog
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    environment:
+        MH_STORAGE: maildir
+        MH_MAILDIR_PATH: /tmp
+    volumes:
+        - "./tmp/mailhog:/tmp"
+    networks:
+      bx:
+        aliases:
+          - mailhog
+
+  push-server-sub:
+    image: ikarpovich/bitrix-push-server
+    links:
+      - redis
+    networks:
+      - default
+      - traefik-net
+    environment:
+      - REDIS_HOST=redis
+      - LISTEN_HOSTNAME=0.0.0.0
+      - LISTEN_PORT=80
+      - SECURITY_KEY=testtesttest
+      - MODE=sub
+    labels:
+      - traefik.port=80
+      - traefik.protocol=http
+      - traefik.frontend.rule=Host:bitrix24-sub.test
+      - traefik.docker.network=traefik-net
+    networks:
+      bx:
+         aliases:
+          - push-server-sub
+      
+  push-server-pub:
+    image: ikarpovich/bitrix-push-server
+    links:
+      - redis
+    networks:
+      - default
+    environment:
+      - REDIS_HOST=redis
+      - LISTEN_HOSTNAME=0.0.0.0
+      - LISTEN_PORT=80
+      - SECURITY_KEY=testtesttest
+      - MODE=pub
+    networks:
+      bx:
+         aliases:
+          - push-server-pub
+      
+  redis:
+    image: redis
+    networks:
+      bx:    
+         aliases:
+          - redis
+
+  mysql:
+    image: 'mariadb'
+    # platform: linux/amd64
+    # build:
+    #   context: ./mysql
+    #   args:
+    #     - BX_MYSQL_IMAGE=${BX_MYSQL_IMAGE}
+    healthcheck:
+      test: "/usr/bin/mysql --user=root --password=+Tr+()8]!szl[HQIsoT5 --execute \"SHOW DATABASES;\""
+      interval: 2s
+      timeout: 20s
+      retries: 10
+    ports:
+      - "3306:3306"
+      
+    volumes:
+    - ${BX_MYSQL_PATH}:/var/lib/mysql
+    - ${BX_LOGS_PATH}/mysql:/var/log/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: +Tr+()8]!szl[HQIsoT5
+      MYSQL_DATABASE: sitemanager
+      MYSQL_USER: bitrix
+      MYSQL_PASSWORD: +Tr+()8]!szl[HQIsoT5
+    command: ['--character-set-server=utf8', '--collation-server=utf8_unicode_ci', '--skip-character-set-client-handshake', '--sql-mode=']
+    networks:
+      bx:
+        aliases:
+          - mysql
+
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    links:
+      - mysql:mysql
+    ports:
+      - 8181:80
+    environment:
+      PMA_HOST: mysql
+      MYSQL_USERNAME: bitrix
+      MYSQL_PASSWORD: +Tr+()8]!szl[HQIsoT5
+    networks:
+      bx:
+        aliases:
+          - mysql
+
+
+  php-fpm:
+    build:
+      context: ./php${BX_PHP_VERSION}
+      args:
+        - BX_XDEBUG_IP=${BX_XDEBUG_IP}
+        - BX_XDEBUG_PORT=${BX_XDEBUG_PORT}
+        - BX_DEFAULT_CHARSET=${BX_DEFAULT_CHARSET}
+        - CONTAINER_UID=${BX_CONTAINER_UID}
+        - CONTAINER_GID=${BX_CONTAINER_GID}
+        - CONTAINER_USER=bx
+        - CONTAINER_GROUP=bx
+    container_name: bx-php-fpm
+    restart: always
+    environment:
+      - CONTAINER_UID=${BX_CONTAINER_UID}
+      - CONTAINER_GID=${BX_CONTAINER_GID}
+      - CONTAINER_USER=bx
+      - CONTAINER_GROUP=bx
+    volumes:
+      - ${BX_LOGS_PATH}/php-fpm:/var/log/php-fpm
+      - ${BX_PUBLIC_HTML_PATH}:/var/www/public_html
+      - ${BX_MODULES_PATH}:/media/bitrix/modules
+      - ./var/www/.bx_temp/sitemanager:/home/bitrix/.bx_temp/sitemanager
+    extra_hosts:
+      - ${BX_UPDATE_HOST}
+    networks:
+      bx:
+        aliases:
+          - php-fpm
+
+  nginx:
+    build:
+      context: ./nginx
+      args:
+        - CONTAINER_UID=${BX_CONTAINER_UID}
+        - CONTAINER_GID=${BX_CONTAINER_GID}
+        - CONTAINER_USER=bx
+        - CONTAINER_GROUP=bx
+    ports:
+      - ${BX_HTTP_PORT}:80
+      - ${BX_HTTPS_PORT}:443
+    container_name: bx-nginx
+    restart: always
+    environment:
+      - BX_DEFAULT_HOST=${BX_DEFAULT_HOST}
+      - BX_DEFAULT_LOCAL_DOMAIN=${BX_DEFAULT_LOCAL_DOMAIN}
+      - BX_HOST_AUTOCREATE=${BX_HOST_AUTOCREATE}
+      - CONTAINER_UID=${BX_CONTAINER_UID}
+      - CONTAINER_GID=${BX_CONTAINER_GID}
+      - CONTAINER_USER=bx
+      - CONTAINER_GROUP=bx
+    volumes:
+      - ${BX_LOGS_PATH}/nginx:/var/log/nginx
+      - ${BX_PUBLIC_HTML_PATH}:/var/www/public_html
+      - ${BX_MODULES_PATH}:/media/bitrix/modules
+      - ./var/www/.bx_temp/sitemanager:/home/bitrix/.bx_temp/sitemanager
+    networks:
+      bx:
+        aliases:
+          - nginx
+
+
+  cronjobber:
+    image: docker:edge
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    container_name: cronjobber
+
+    command: >
+        sh -c "
+        echo '* * * * * docker exec bx-php-fpm php -f ./var/www/public_html/bitrix/php_interface/cron_events.php' > /etc/crontabs/root
+        && crond -f"
+
+    networks:
+      bx:
+
+
+networks:
+  bx:
+
+volumes:
+  mysql-data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ${BX_MYSQL_PATH}
+  bx-modules:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ${BX_MODULES_PATH}
+  bx-public:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ${BX_PUBLIC_HTML_PATH}

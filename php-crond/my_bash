@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "Hi Enjoyable Programming this job with bash runs each minute - $(date)"
+echo "You can schedule any thing you want here"

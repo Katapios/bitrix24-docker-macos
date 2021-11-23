@@ -1,0 +1,15 @@
+# min       hour        day         month       weekday     command
+# (0-59)    (0-23)      (1-31)      (1-12)      (0-6)
+#*   	    *   	    *   	    *   	    *   	    /bin/my_bash
+
+*   	    *   	    *   	    *   	    *   	    /usr/bin/php -f test.php
+
+# https://crontab.guru
+
+
+# * min (0-59)
+# * hour (0-23)
+# * day (1-31)
+# * month (1-12) || jan,feb,mar ...
+# * weekday (0-6) || sun,mon,tue,wed ... sun = 0
+# command
