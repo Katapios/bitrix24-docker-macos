@@ -190,7 +190,7 @@ services:
 
     command: >
         sh -c "
-        echo '* * * * * docker exec bx-php-fpm php -f ./var/www/public_html/bitrix/php_interface/cron_events.php' > /etc/crontabs/root
+        echo '* * * * * docker exec bx-php-fpm php -f /var/www/public_html/bitrix/php_interface/cron_events.php' > /etc/crontabs/root
         && crond -f"
 
     networks:
