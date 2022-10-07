@@ -2,14 +2,16 @@ version: '3.8'
 
 services:
 
-  memcache:
-    image: memcached:alpine
+  memcached:
+    image: memcached:1.6.12-alpine
     container_name: bx-memcache
-    restart: always
+    volumes:
+      - "./var/www/memcached:/var/lib/memcached"
+    ports:
+      - '11211:11211'
     networks:
-      bx:
-        aliases:
-          - memcache
+      - bx
+    restart: always
 
   mailhog:
     image: mailhog/mailhog
@@ -18,10 +20,10 @@ services:
       - "8025:8025"
       - "1025:1025"
     environment:
-        MH_STORAGE: maildir
-        MH_MAILDIR_PATH: /tmp
+      MH_STORAGE: maildir
+      MH_MAILDIR_PATH: /tmp
     volumes:
-        - "./tmp/mailhog:/tmp"
+      - "./var/www/mailhog:/tmp"
     networks:
       bx:
         aliases:
@@ -47,9 +49,9 @@ services:
       - traefik.docker.network=traefik-net
     networks:
       bx:
-         aliases:
+        aliases:
           - push-server-sub
-      
+
   push-server-pub:
     image: ikarpovich/bitrix-push-server
     links:
@@ -64,23 +66,18 @@ services:
       - MODE=pub
     networks:
       bx:
-         aliases:
+        aliases:
           - push-server-pub
-      
+
   redis:
     image: redis
     networks:
-      bx:    
-         aliases:
+      bx:
+        aliases:
           - redis
 
   mysql:
     image: 'mariadb'
-    # platform: linux/amd64
-    # build:
-    #   context: ./mysql
-    #   args:
-    #     - BX_MYSQL_IMAGE=${BX_MYSQL_IMAGE}
     healthcheck:
       test: "/usr/bin/mysql --user=root --password=+Tr+()8]!szl[HQIsoT5 --execute \"SHOW DATABASES;\""
       interval: 2s
@@ -88,16 +85,16 @@ services:
       retries: 10
     ports:
       - "3306:3306"
-      
+
     volumes:
-    - ${BX_MYSQL_PATH}:/var/lib/mysql
-    - ${BX_LOGS_PATH}/mysql:/var/log/mysql
+      - ${BX_MYSQL_PATH}:/var/lib/mysql
+      - ${BX_LOGS_PATH}/mysql:/var/log/mysql
     environment:
       MYSQL_ROOT_PASSWORD: +Tr+()8]!szl[HQIsoT5
       MYSQL_DATABASE: sitemanager
       MYSQL_USER: bitrix
       MYSQL_PASSWORD: +Tr+()8]!szl[HQIsoT5
-    command: ['--character-set-server=utf8', '--collation-server=utf8_unicode_ci', '--skip-character-set-client-handshake', '--sql-mode=']
+    command: ['--character-set-server=utf8', '--collation-server=utf8_unicode_ci', '--skip-character-set-client-handshake', '--sql-mode=', '--innodb_strict_mode=0']
     networks:
       bx:
         aliases:
@@ -189,12 +186,13 @@ services:
     container_name: cronjobber
 
     command: >
-        sh -c "
-        echo '* * * * * docker exec bx-php-fpm php -f /var/www/public_html/bitrix/php_interface/cron_events.php' > /etc/crontabs/root
-        && crond -f"
-
+      sh -c "
+      echo '* * * * * docker exec bx-php-fpm php -f /var/www/public_html/bitrix/php_interface/cron_events.php' > /etc/crontabs/root
+      && crond -f"
     networks:
       bx:
+
+
 
 
 networks:
