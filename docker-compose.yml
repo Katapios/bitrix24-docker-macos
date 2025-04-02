@@ -33,9 +33,9 @@ services:
     image: ikarpovich/bitrix-push-server
     links:
       - redis
-    networks:
-      - default
-      - traefik-net
+    # networks:
+    #   - default
+    #   - traefik-net
     environment:
       - REDIS_HOST=redis
       - LISTEN_HOSTNAME=0.0.0.0
@@ -51,13 +51,15 @@ services:
       bx:
         aliases:
           - push-server-sub
+          - default
+          - traefik-net
 
   push-server-pub:
     image: ikarpovich/bitrix-push-server
     links:
       - redis
-    networks:
-      - default
+    # networks:
+    #   - default
     environment:
       - REDIS_HOST=redis
       - LISTEN_HOSTNAME=0.0.0.0
@@ -68,6 +70,7 @@ services:
       bx:
         aliases:
           - push-server-pub
+          - default
 
   redis:
     image: redis
