@@ -1,12 +1,10 @@
-FROM php:8.0-fpm
+FROM php:8.2-fpm
 
-ARG APCU_VERSION=5.1.20
-
+ARG APCU_VERSION=5.1.22
 ARG CONTAINER_GID
 ARG CONTAINER_UID
 ARG CONTAINER_USER
 ARG CONTAINER_GROUP
-
 ARG BX_XDEBUG_IP
 ARG BX_XDEBUG_PORT
 ARG BX_DEFAULT_CHARSET
@@ -15,120 +13,83 @@ COPY ./conf.d /usr/local/etc/php/conf.d/
 COPY ./php-fpm.d /usr/local/etc/php-fpm.d/
 COPY ./exim/update-exim4.conf.conf /etc/exim4/
 
-
-
-
-
-# Install dependencies
-
 RUN apt-get update && apt-get install -y \
-
     cron \
-
     build-essential \
-
     locales \
-
-    libmcrypt-dev \
-
     libonig-dev \
-
     zip \
-
-    jpegoptim optipng pngquant gifsicle \
-
+    jpegoptim \
+    optipng \
+    pngquant \
+    gifsicle \
     vim \
-
     unzip \
-
     git \
-
     graphviz \
-
     curl \
+    supervisor \
+    exim4 \
+    default-mysql-client \
+    default-libmysqlclient-dev \
+    libmagickwand-dev \
+    libjpeg62-turbo-dev \
+    libfreetype6-dev \
+    libmemcached-dev \
+    libicu-dev \
+    libzip-dev \
+    zlib1g-dev \
+    libpng-dev \
+    libwebp-dev \
+    libxml2-dev \
+    libldap2-dev \
+    golang \
+    && rm -rf /var/lib/apt/lists/*
 
-    supervisor
+RUN docker-php-ext-configure gd \
+    --with-freetype \
+    --with-jpeg \
+    --with-webp \
+    && docker-php-ext-install -j$(nproc) gd
 
+RUN docker-php-ext-install mysqli pdo_mysql
 
-
-
-
-
-
-RUN apt-get update \
-    && apt-get install -y vim exim4 zip unzip default-mysql-client git \
-    && echo "syntax on" > ~/.vimrc \
-    && apt-get -y install \
-        libmagickwand-dev \
-        libjpeg62-turbo-dev \
-        libfreetype6-dev \
-        libmemcached-dev \
-        libicu-dev \
-        libzip-dev \
-        zlib1g-dev \
-        libpng-dev \
-        libxml2-dev \
-        --no-install-recommends \
-    && pecl install apcu-${APCU_VERSION} \
-    && docker-php-ext-enable apcu \
-    && pecl install memcached \
-    && docker-php-ext-enable memcached \
-    && docker-php-ext-configure gd --with-freetype=/usr/include/ --with-jpeg=/usr/include/ \
-    && docker-php-ext-install -j$(nproc) gd \
-    && docker-php-ext-install mysqli pdo_mysql opcache exif intl sockets bz2 zip \
+RUN docker-php-ext-install \
+    opcache \
+    exif \
+    intl \
+    sockets \
+    bz2 \
+    zip \
+    ldap \
     && docker-php-ext-configure opcache --enable-opcache \
-    && rm -rf /tmp/* /var/cache/apk/* /var/lib/apt/lists/* \
-    && pecl install xdebug && docker-php-ext-enable xdebug
+    && pecl install \
+        apcu-${APCU_VERSION} \
+        memcached \
+        xdebug \
+        imagick \
+    && docker-php-ext-enable \
+        apcu \
+        memcached \
+        xdebug \
+        imagick
 
+RUN go install github.com/mailhog/mhsendmail@latest \
+    && cp /root/go/bin/mhsendmail /usr/bin/mhsendmail \
+    && echo 'sendmail_path = /usr/bin/mhsendmail --smtp-addr mailhog:1025' > /usr/local/etc/php/conf.d/mailhog.ini
 
-RUN apt-get update
+RUN groupadd -g ${CONTAINER_GID} ${CONTAINER_GROUP} \
+    && useradd -u ${CONTAINER_UID} -g ${CONTAINER_GID} ${CONTAINER_USER} \
+    && chown -R ${CONTAINER_USER}:${CONTAINER_GROUP} /usr/local/etc/php/ \
+    && chmod -R 775 /usr/local/etc/php/
 
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-#install mail
-#RUN curl -Lsf 'https://storage.googleapis.com/golang/go1.8.3.linux-amd64.tar.gz' | tar -C '/usr/local' -xvzf -
+RUN echo "xdebug.client_host=${BX_XDEBUG_IP}" >> /usr/local/etc/php/conf.d/xdebug.ini \
+    && echo "xdebug.client_port=${BX_XDEBUG_PORT}" >> /usr/local/etc/php/conf.d/xdebug.ini \
+    && echo "default_charset=${BX_DEFAULT_CHARSET}" >> /usr/local/etc/php/conf.d/php.ini \
+    && echo "mbstring.internal_encoding=${BX_DEFAULT_CHARSET}" >> /usr/local/etc/php/conf.d/mbstring.ini
 
-RUN apt install -y golang
-ENV PATH /usr/local/go/bin:$PATH
-RUN go get github.com/mailhog/mhsendmail
-RUN cp /root/go/bin/mhsendmail /usr/bin/mhsendmail
-RUN echo 'sendmail_path = /usr/bin/mhsendmail --smtp-addr mailhog:1025' > /usr/local/etc/php/php.ini
+RUN update-exim4.conf -v
 
-
-
-
-#RUN \
-#apt-get update && \
-#apt-get install libldap2-dev -y && \
-
-RUN apt-get install libldap2-dev -y
-#rm -rf /var/lib/apt/lists/* && \
-#docker-php-ext-configure ldap --with-libdir=lib/x86_64-linux-gnu/ && \
-
-RUN docker-php-ext-configure ldap
-RUN docker-php-ext-install ldap
-
-
-RUN cd /tmp && \
-    git clone https://github.com/Imagick/imagick && \
-    cd imagick && \
-    phpize && \
-    ./configure && \
-    make && make install && \
-    docker-php-ext-enable imagick && \
-    cd /tmp && rm -rf imagick
-
-RUN groupadd -g ${CONTAINER_GID} ${CONTAINER_GROUP} && \
-    useradd -u ${CONTAINER_UID} -g ${CONTAINER_GID} ${CONTAINER_USER}
-
-RUN chmod -R 777 /usr/local/etc/php/ \
-    && chown -R ${CONTAINER_USER} /usr/local/etc/php/ \
-    && curl -sS https://getcomposer.org/installer | php ; mv composer.phar /usr/bin/composer \
-    && update-exim4.conf -v
-
-RUN sed -i "$ a xdebug.client_host="${BX_XDEBUG_IP} /usr/local/etc/php/conf.d/xdebug.ini \
-    && sed -i "$ a xdebug.client_port="${BX_XDEBUG_PORT} /usr/local/etc/php/conf.d/xdebug.ini \
-    && sed -i "$ a default_charset="${BX_DEFAULT_CHARSET} /usr/local/etc/php/conf.d/php.ini \
-    && sed -i "$ a mbstring.internal_encoding="${BX_DEFAULT_CHARSET} /usr/local/etc/php/conf.d/mbstring.ini
-
-#ENTRYPOINT php-fpm -F
-CMD bash -c "cron && php-fpm"
+CMD ["sh", "-c", "cron && php-fpm"]
