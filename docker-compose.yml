@@ -2,6 +2,16 @@ version: '3.8'
 
 services:
 
+  fake-logs-generator:
+    build:
+      context: ./fake-logs-generator
+    container_name: fake-logs-generator
+    networks:
+      - bx
+    depends_on:
+      - opensearch
+  
+
   memcached:
     image: memcached:1.6.12-alpine
     container_name: bx-memcache
@@ -12,6 +22,59 @@ services:
     networks:
       - bx
     restart: always
+
+
+  opensearch:
+    build:
+      context: ./opensearch
+      dockerfile: Dockerfile.opensearch
+    container_name: opensearch
+    ports:
+      - "9200:9200"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+      # - ./var/www/opensearch-data:/usr/share/opensearch/data
+    networks:
+      - bx
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/ > /dev/null || exit 1"]
+      interval: 10s
+      retries: 5
+      start_period: 20s
+
+  opensearch-dashboards:
+    build:
+      context: ./opensearch
+      dockerfile: Dockerfile.dashboards
+    container_name: opensearch-dashboards
+    ports:
+      - "5601:5601"
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    networks:
+      bx:
+
+
+  grafana:
+    build:
+      context: ./grafana
+      dockerfile: Dockerfile
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      # - ./var/www/grafana-storage:/var/lib/grafana
+      # - ./opensearch/config/grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      opensearch:
+        condition: service_healthy    
+    networks:
+      bx:
+    
 
   mailhog:
     image: mailhog/mailhog
@@ -196,54 +259,6 @@ services:
       bx:
 
 
-  opensearch:
-    image: opensearchproject/opensearch:2.19.1  # Образ OpenSearch (стабильная версия с поддержкой ARM64)
-    container_name: opensearch
-    environment:
-      - discovery.type=single-node               # Конфигурация одиночного узла (отключает проверки кластера)&#8203;:contentReference[oaicite:3]{index=3}
-      - DISABLE_INSTALL_DEMO_CONFIG=true         # Отключить установку демо-настроек безопасности (SSL/пароли)&#8203;:contentReference[oaicite:4]{index=4}
-      - DISABLE_SECURITY_PLUGIN=true             # Полностью отключить плагин безопасности OpenSearch&#8203;:contentReference[oaicite:5]{index=5}
-    volumes:
-      - ./var/www/opensearch-data:/usr/share/opensearch/data
-    ports:
-      - "9200:9200"    # Публикуем порт 9200 для доступа к OpenSearch
-    ulimits:
-      memlock:
-        soft: -1       # Разрешить блокировку памяти (чтобы избежать свопинга, опционально)
-        hard: -1
-
-    networks:
-      bx:
-
-  opensearch-dashboards:
-    image: opensearchproject/opensearch-dashboards:2.19.1  # Образ OpenSearch Dashboards (совместим с ARM64)
-    container_name: opensearch-dashboards
-    environment:
-      - OPENSEARCH_HOSTS=["http://opensearch:9200"]        # URL OpenSearch (сервис opensearch) для Dashboards
-      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true            # Отключить плагин безопасности в Dashboards (убрать логин)&#8203;:contentReference[oaicite:7]{index=7}&#8203;:contentReference[oaicite:8]{index=8}
-    ports:
-      - "5601:5601"   # Публикуем порт 5601 для доступа к Dashboards
-    depends_on:
-      - opensearch    # Зависимость: Dashboards стартует после OpenSearch
-    networks:
-      bx:
-
-
-  grafana:
-    image: grafana/grafana:10.2.0
-    container_name: grafana
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin   # Устанавливаем пароль для администратора
-    ports:
-      - "3000:3000"   # Порт для доступа к интерфейсу Grafana
-    depends_on:
-      - opensearch
-    volumes:
-        - ./var/www/grafana-data:/var/lib/grafana
-    networks:
-      bx:
-
-
 
 
 networks:
@@ -268,3 +283,7 @@ volumes:
       o: bind
       type: none
       device: ${BX_PUBLIC_HTML_PATH}
+  opensearch-data:
+    driver: local
+  grafana-storage:
+    driver: local      

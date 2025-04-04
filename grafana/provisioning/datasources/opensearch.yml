@@ -1,0 +1,12 @@
+apiVersion: 1
+
+datasources:
+  - name: OpenSearch
+    type: grafana-opensearch-datasource
+    access: proxy
+    url: http://opensearch:9200
+    jsonData:
+      database: rest_api_logs
+      timeField: timestamp
+      version: "2.11"
+    editable: true

@@ -1,0 +1,17 @@
+FROM ubuntu:22.04
+RUN apt-get update && apt-get install -y curl tar && rm -rf /var/lib/apt/lists/*
+ENV OSD_VERSION=2.15.0
+ENV DASHBOARDS_HOME=/usr/share/opensearch-dashboards
+RUN groupadd -g 1000 opensearch-dashboards && \
+    useradd -u 1000 -g opensearch-dashboards -d $DASHBOARDS_HOME opensearch-dashboards && \
+    mkdir -p $DASHBOARDS_HOME
+RUN curl -SL "https://artifacts.opensearch.org/releases/bundle/opensearch-dashboards/$OSD_VERSION/opensearch-dashboards-$OSD_VERSION-linux-arm64.tar.gz" \
+    -o /tmp/dashboards.tar.gz && \
+    tar -xzf /tmp/dashboards.tar.gz -C $DASHBOARDS_HOME --strip-components=1 && \
+    rm /tmp/dashboards.tar.gz
+RUN rm -rf $DASHBOARDS_HOME/plugins/securityDashboards
+COPY --chown=opensearch-dashboards:opensearch-dashboards config/opensearch_dashboards.yml $DASHBOARDS_HOME/config/opensearch_dashboards.yml
+RUN chown -R opensearch-dashboards:opensearch-dashboards $DASHBOARDS_HOME
+WORKDIR $DASHBOARDS_HOME
+USER opensearch-dashboards
+CMD ["bin/opensearch-dashboards"]

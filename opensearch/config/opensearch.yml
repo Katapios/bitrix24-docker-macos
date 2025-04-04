@@ -1,0 +1,8 @@
+cluster.name: "os-cluster"
+node.name: "os-node1"
+network.host: "0.0.0.0"
+http.port: 9200
+discovery.type: "single-node"
+plugins.security.disabled: true
+plugins.security.ssl.http.enabled: false
+plugins.security.ssl.transport.enabled: false

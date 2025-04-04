@@ -1,0 +1,19 @@
+FROM ubuntu:22.04
+RUN apt-get update && apt-get install -y curl tar && rm -rf /var/lib/apt/lists/*
+ENV OS_VERSION=2.15.0
+ENV OPENSEARCH_HOME=/usr/share/opensearch
+RUN groupadd -g 1000 opensearch && \
+    useradd -u 1000 -g opensearch -d $OPENSEARCH_HOME opensearch && \
+    mkdir -p $OPENSEARCH_HOME
+RUN curl -SL "https://artifacts.opensearch.org/releases/bundle/opensearch/$OS_VERSION/opensearch-$OS_VERSION-linux-arm64.tar.gz" \
+    -o /tmp/opensearch.tar.gz && \
+    tar -xzf /tmp/opensearch.tar.gz -C $OPENSEARCH_HOME --strip-components=1 && \
+    rm /tmp/opensearch.tar.gz
+COPY --chown=opensearch:opensearch config/opensearch.yml $OPENSEARCH_HOME/config/opensearch.yml
+RUN mkdir -p $OPENSEARCH_HOME/data $OPENSEARCH_HOME/logs && \
+    chown -R opensearch:opensearch $OPENSEARCH_HOME
+ENV JAVA_HOME=$OPENSEARCH_HOME/jdk
+ENV PATH="$JAVA_HOME/bin:$OPENSEARCH_HOME/bin:$PATH"
+WORKDIR $OPENSEARCH_HOME
+USER opensearch
+CMD ["opensearch"]
